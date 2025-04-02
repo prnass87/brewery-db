@@ -1,0 +1,12 @@
+# Ambiente virtual
+.venv/
+
+# VS Code
+.vscode/
+
+# Excel de saída
+*.xlsx
+
+#caches
+__pycache__/
+*.pyc

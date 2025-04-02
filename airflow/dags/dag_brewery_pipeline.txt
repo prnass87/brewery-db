@@ -1,0 +1,67 @@
+import os
+import sys
+from datetime import datetime, timedelta
+
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+
+# Adiciona o caminho absoluto do projeto dentro do container
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../brewery-db")))
+
+# Importações dos módulos do pipeline
+from src.extractor import extract_brewery_data
+from notebooks.bronze.stg_brz_brewerylist import transform_bronze
+from notebooks.silver.brz_slv_brewerylist import transform_silver
+from notebooks.gold.slv_gld_brewerylist import transform_gold
+
+# Configurações padrão da DAG
+default_args = {
+    "owner": "airflow",
+    "depends_on_past": False,
+    "retries": 1,
+    "retry_delay": timedelta(minutes=2),
+
+    # Opção para habilitar envio de e-mails (requer configuração do SMTP no Airflow)
+    # "email": ["pipeline.alerts@exemplo.com"],
+    # "email_on_failure": True,
+    # "email_on_success": True,
+    # "email_on_retry": False,
+}
+
+# Definição da DAG
+with DAG(
+    dag_id="brewery_medallion_pipeline",
+    default_args=default_args,
+    description="Pipeline ETL do BreweryDB com arquitetura Medallion",
+    schedule_interval="0 1 * * *",  # Executa diariamente às 01:00 da manhã
+    start_date=datetime(2025, 4, 1),
+    catchup=False,
+    tags=["brewery", "etl", "medallion"],
+) as dag:
+
+    # Tarefa de extração da API
+    extract = PythonOperator(
+        task_id="extract_data",
+        python_callable=extract_brewery_data,
+    )
+
+    # Tarefa de transformação da camada Bronze
+    bronze = PythonOperator(
+        task_id="transform_bronze",
+        python_callable=transform_bronze,
+    )
+
+    # Tarefa de transformação da camada Silver
+    silver = PythonOperator(
+        task_id="transform_silver",
+        python_callable=transform_silver,
+    )
+
+    # Tarefa de transformação da camada Gold
+    gold = PythonOperator(
+        task_id="transform_gold",
+        python_callable=transform_gold,
+    )
+
+    # Ordem de execução das tarefas
+    extract >> bronze >> silver >> gold
